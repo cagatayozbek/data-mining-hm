@@ -1,0 +1,12 @@
+{
+  "python.defaultInterpreterPath": "c:\\Users\\Furkan\\Anaconda3\\python.exe",
+  "python.analysis.extraPaths": [
+    "c:\\Users\\Furkan\\Anaconda3\\lib\\site-packages"
+  ],
+  "jupyter.defaultKernel": "python3",
+  "jupyter.kernels.filter": [
+    {
+      "path": "c:\\Users\\Furkan\\Anaconda3\\python.exe"
+    }
+  ]
+}
