@@ -1,0 +1,357 @@
+\documentclass[conference]{IEEEtran}
+
+% ---------- PACKAGES ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{float}
+
+\begin{document}
+
+% ---------- TITLE & AUTHORS ----------
+\title{From-Scratch Implementations of kNN, Logistic Regression and Gaussian Naive Bayes for Heart Disease Prediction: A Validation Study}
+
+\author{
+\IEEEauthorblockN{Salih Emre Ağca}
+\IEEEauthorblockA{
+Department of Computer Engineering\\
+Ankara University\\
+Ankara, Turkey\\
+Email: agcasalihemre@gmail.com}
+\and
+\IEEEauthorblockN{Furkan Çağatay Özbek}
+\IEEEauthorblockA{
+Department of Computer Engineering\\
+Ankara University\\
+Ankara, Turkey\\
+Email: ozbekk.cagatay@gmail.com}
+\and
+\IEEEauthorblockN{Ezra Bolat}
+\IEEEauthorblockA{
+Department of Computer Engineering\\
+Ankara University\\
+Ankara, Turkey\\
+Email: bolatezra@gmail.com}
+}
+
+\maketitle
+
+% ---------- ABSTRACT ----------
+\begin{abstract}
+This study evaluates three classical machine learning algorithms---$k$-Nearest Neighbors (kNN), Logistic Regression with $\ell_2$ regularization, and Gaussian Naive Bayes (GNB)---implemented entirely from scratch in Python for binary heart disease prediction. Using two public clinical datasets, we adopt a rigorous experimental protocol with stratified train--test splits, stratified 5-fold cross-validation, and fold-consistent feature scaling whose parameters are estimated only from training data. The from-scratch models are quantitatively compared against reference implementations from \texttt{scikit-learn}. Under matched preprocessing and hyperparameters, our kNN and GNB implementations reproduce library results exactly, and Logistic Regression achieves nearly identical performance, supporting the correctness of the implementations. While ensemble and deep learning methods in the literature often report higher headline metrics, this work establishes transparent, reproducible baselines and validates the core algorithms that underpin many medical ML pipelines.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Heart disease prediction, k-nearest neighbors, logistic regression, Gaussian naive Bayes, from-scratch implementation, stratified cross-validation, algorithmic transparency.
+\end{IEEEkeywords}
+
+% ==========================================================
+\section{Introduction}
+% ==========================================================
+Cardiovascular diseases (CVDs) are the leading cause of death worldwide, accounting for an estimated 19.8 million deaths in 2022 (approximately 32\% of all global deaths). Around 85\% of these fatalities are caused by heart attacks and strokes. Early detection of cardiovascular disease is therefore critical, as timely intervention can reduce mortality and improve patient outcomes~\cite{who_cvd}.
+
+The complexity of CVD risk factors and the availability of high-dimensional Electronic Health Records (EHRs) have driven a shift from traditional statistical scores toward machine learning-based risk prediction models. In recent years, \emph{black-box} models such as ensemble methods (e.g., Random Forest, XGBoost) and deep neural networks have become dominant in the literature due to their strong predictive performance. However, these models often sacrifice \emph{intrinsic interpretability}, making it difficult for clinicians to trace predictions back to individual risk factors or probabilities.
+
+In parallel, classical models such as Logistic Regression, kNN, and Gaussian Naive Bayes remain important baselines for tabular clinical data. They are relatively simple, computationally modest, and, in the case of Logistic Regression and GNB, directly interpretable in terms of feature weights and class-conditional distributions. High-level libraries (e.g., \texttt{scikit-learn}) provide robust implementations of these methods, but they can conceal important details about optimization, numerical stability, and how preprocessing is coupled with cross-validation.
+
+This study adopts a \emph{first-principles} perspective. Rather than proposing a new state-of-the-art architecture, we focus on the rigorous implementation and validation of foundational models. The main goals are:
+\begin{itemize}
+    \item \textbf{Algorithmic validation:} Implement kNN, Logistic Regression with $\ell_2$ regularization, and Gaussian Naive Bayes from scratch and verify their behavior against \texttt{scikit-learn} under identical preprocessing and hyperparameters.
+    \item \textbf{Methodological rigor:} Apply a careful evaluation protocol based on stratified train--test splits, stratified $k$-fold cross-validation for model selection (where applicable), and training-only estimation of scaling parameters to avoid optimistic biases.
+    \item \textbf{Transparent baselines:} Quantify the performance of interpretable baselines on two heart disease datasets using Accuracy, Precision, Recall, F1-score, and ROC--AUC, providing a clear reference point relative to more complex models reported in the literature.
+\end{itemize}
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related} summarizes related work on heart disease prediction. Section~\ref{sec:method} presents the models, datasets, preprocessing, and evaluation protocol. Section~\ref{sec:results} reports experimental results, followed by discussion and limitations in Section VI and conclusions in Section VII.
+
+% ==========================================================
+\section{Related Work}
+\label{sec:related}
+% ==========================================================
+The application of machine learning to cardiovascular disease prediction has evolved significantly, shifting from traditional statistical approaches to complex ensemble and deep learning architectures.
+
+\subsection{State-of-the-Art Approaches}
+Recent literature demonstrates that ensemble learning techniques often achieve superior performance on tabular clinical data. For instance, Yang and Guan~\cite{yang2022} proposed a model combining feature optimization with the SMOTE-XGBoost algorithm, effectively addressing class imbalance. Similarly, Doki et al.~\cite{doki2022} reported high classification accuracies (exceeding 97\%) using XGBoost on standard datasets, establishing these methods as strong benchmarks for heart disease prediction on UCI-style datasets.
+
+\subsection{Deep Learning and Prognostics}
+For larger or unstructured datasets, deep learning has shown superiority. Lee et al.~\cite{lee2022} compared deep learning models against conventional risk scores for CVD-related mortality and hospital admission, finding higher AUC values for deep models. However, these gains come with increased computational cost and reduced transparency.
+
+\subsection{Challenges and Motivation}
+Despite reported performance gains in the literature, a gap often remains between academic results and clinical utility, particularly regarding reproducibility and transparent reporting of preprocessing and evaluation pipelines. This study diverges from the trend of increasing model complexity. Instead, we focus on the rigorous implementation and evaluation of foundational interpretable models (kNN, Logistic Regression, Gaussian Naive Bayes). By implementing these algorithms from scratch and validating them against standard libraries under a leakage-aware protocol, we aim to provide transparent, reproducible, and methodologically sound baselines that can serve as a reference for more complex approaches.
+
+% ==========================================================
+\section{Models and Methodology}
+\label{sec:method}
+% ==========================================================
+
+\subsection{Model Descriptions}
+
+\subsubsection{$k$-Nearest Neighbors (kNN)}
+kNN assigns a label to a new sample by majority vote among its $k$ closest training instances according to a distance metric. We evaluate Euclidean and Manhattan distances. kNN has no parameter learning beyond storing training data; inference cost dominates because distances must be computed between the query point and all training points. The from-scratch implementation uses vectorized distance computations in NumPy to avoid explicit Python loops.
+
+\subsubsection{Logistic Regression}
+Logistic Regression models the conditional probability
+\[
+p(y=1 \mid x) = \sigma(w^\top x + b),
+\]
+where $\sigma(\cdot)$ is the sigmoid function. Parameters $(w, b)$ are estimated by minimizing the regularized negative log-likelihood with an $\ell_2$ penalty on $w$:
+\[
+J(w, b) = -\frac{1}{N} \sum_{i=1}^{N} \Big[y_i \log(\hat{y}_i) + (1-y_i)\log(1-\hat{y}_i)\Big] + \frac{\lambda}{2N} \|w\|_2^2,
+\]
+where $\hat{y}_i = \sigma(w^\top x_i + b)$ and $\lambda \ge 0$ controls regularization strength. The from-scratch implementation uses batch gradient descent with a fixed learning rate and a maximum number of iterations. The \texttt{scikit-learn} baseline uses standard solvers (\texttt{liblinear}, \texttt{lbfgs}), parameterized by $C$ (inverse regularization strength), where larger $C$ corresponds to weaker regularization.
+
+\subsubsection{Gaussian Naive Bayes}
+Gaussian Naive Bayes assumes conditional independence of features given the class label, with each feature modeled as a univariate Gaussian per class. For each class $c$, the model estimates a prior $\pi_c$ and, for each feature $j$, a mean $\mu_{c,j}$ and variance $\sigma_{c,j}^2$. The class-conditional likelihood is
+\[
+p(x \mid y=c) = \prod_{j} \mathcal{N}(x_j \mid \mu_{c,j}, \sigma_{c,j}^2),
+\]
+and classification is performed by comparing log-posteriors $\log p(y=c) + \log p(x \mid y=c)$. A small variance-smoothing term (set to $10^{-9}$) is added to $\sigma_{c,j}^2$ to improve numerical stability, mirroring common library implementations.
+
+\subsection{Datasets}
+We evaluate all methods on two public datasets with the same binary objective (presence of heart disease) but different structures and preprocessing requirements:
+
+\begin{itemize}
+  \item \textbf{Dataset~1 (UCI Heart Disease; Kaggle mirror)}~\cite{hdpred}: After preprocessing, the dataset contains 920 instances and \textbf{15 columns in total} (\textbf{14 features + 1 binary target}). The target distribution is 509 positive and 411 negative.
+  \item \textbf{Dataset~2 (Heart Failure Prediction; Kaggle, UCI-based)}~\cite{hfpred}: After preprocessing and encoding, the dataset contains 918 instances and \textbf{12 columns in total} (\textbf{11 features + 1 binary target}). The target distribution is 508 positive and 410 negative.
+\end{itemize}
+
+For both datasets we use a stratified train--test split with 80\% training and 20\% testing:
+\begin{itemize}
+  \item Dataset~1: 736 training samples, 184 test samples.
+  \item Dataset~2: 734 training samples, 184 test samples.
+\end{itemize}
+
+% ----------------------------------------------------------
+\subsection{Preprocessing and Feature Engineering}
+% ----------------------------------------------------------
+
+\paragraph{Dataset~1 (UCI Heart Disease).}
+Missing values are imputed using a model-based strategy with tree-based estimators, followed by categorical normalization and numeric encoding:
+\begin{itemize}
+    \item Continuous variables are imputed using a Random Forest regressor-based approach on non-missing rows.
+    \item Categorical variables are imputed using a Random Forest classifier-based approach.
+    \item Categorical text values are normalized to consistent tokens, binary variables are mapped to 0/1, and remaining categorical variables are encoded numerically.
+\end{itemize}
+
+\paragraph{Dataset~2 (Heart Failure Prediction).}
+This dataset contains no missing values. We apply:
+\begin{itemize}
+    \item Binary encoding for \texttt{Sex} and \texttt{ExerciseAngina}.
+    \item One-hot encoding for multi-class categorical features (\texttt{ChestPainType}, \texttt{RestingECG}, \texttt{ST\_Slope}).
+    \item Column name cleanup to ensure consistent identifiers.
+\end{itemize}
+
+\textit{Implementation note.} The preprocessing steps above produce fully numeric tables. Feature scaling is not applied globally at this stage; instead, it is handled inside the evaluation pipelines as described next.
+
+% ----------------------------------------------------------
+\subsection{Feature Scaling and Evaluation Protocol}
+% ----------------------------------------------------------
+
+\subsubsection{Scaling Strategy}
+We apply scaling within each split/fold using training-only statistics:
+\begin{itemize}
+  \item \textbf{kNN}: Min--max scaling to $[0,1]$ is computed from the training portion (feature-wise min/max) and applied to validation/test data using the same parameters.
+  \item \textbf{Logistic Regression and GNB}: Standardization (zero mean, unit variance) is fit on training data and applied to validation/test data using the training mean and standard deviation.
+\end{itemize}
+
+\subsubsection{Cross-Validation, Model Selection, and Reproducibility}
+We report final test performance on a single held-out test split. Hyperparameters are tuned using only training data:
+\begin{itemize}
+  \item \textbf{kNN}: Stratified 5-fold cross-validation over $k \in \{1,5,9,13,17,21\}$ for Euclidean and Manhattan distances; the best $k$ per metric is selected by mean CV accuracy.
+  \item \textbf{Logistic Regression (scratch)}: Stratified 5-fold CV via \texttt{GridSearchCV} over learning rate, number of iterations, and $\lambda$ (L2 strength). Standardization is implemented inside the estimator so that it is refit per fold.
+  \item \textbf{Logistic Regression (\texttt{scikit-learn})}: Stratified 5-fold CV over $C$, solver, and \texttt{max\_iter} using a \texttt{Pipeline(StandardScaler, LogisticRegression)}.
+  \item \textbf{GNB}: We use \texttt{var\_smoothing} $=10^{-9}$ for stability and report stratified 5-fold CV accuracy on the training split using the same standardization strategy.
+\end{itemize}
+
+For reproducibility, we use a fixed random seed (\texttt{random\_state} = 42), stratified splitting, and \texttt{StratifiedKFold} with shuffling for cross-validation ($n\_splits=5$, \texttt{shuffle=True}).
+
+\subsubsection{Evaluation Metrics}
+We report Accuracy, Precision, Recall, and F1-score for all models, and ROC--AUC for Logistic Regression and GNB.
+
+% ==========================================================
+\section{Experimental Results}
+\label{sec:results}
+% ==========================================================
+
+% ----------------------------------------------------------
+\subsection{Dataset~1: UCI Heart Disease}
+% ----------------------------------------------------------
+
+\subsubsection{kNN (Scratch vs. \texttt{scikit-learn})}
+Table~\ref{tab:uci-knn} reports kNN test performance. Stratified cross-validation selected $k=5$ for Euclidean distance and $k=17$ for Manhattan distance. Under matched configurations, the from-scratch and \texttt{scikit-learn} implementations yield identical metrics.
+
+\begin{table}[H]
+  \centering
+  \caption{kNN results on Dataset~1 (test set).}
+  \label{tab:uci-knn}
+  \begin{tabular}{lcccc}
+    \toprule
+    Model & Acc & Prec & Rec & F1\\
+    \midrule
+    FS kNN (Eucl., $k=5$)  & 0.8750 & 0.8911 & 0.8824 & 0.8867\\
+    FS kNN (Manh., $k=17$) & 0.8478 & 0.8776 & 0.8431 & 0.8600\\
+    SK kNN (Eucl., $k=5$)  & 0.8750 & 0.8911 & 0.8824 & 0.8867\\
+    SK kNN (Manh., $k=17$) & 0.8478 & 0.8776 & 0.8431 & 0.8600\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Logistic Regression (Scratch vs. \texttt{scikit-learn})}
+Table~\ref{tab:uci-logreg} reports Logistic Regression performance. Both implementations achieve the same test accuracy and nearly identical ROC--AUC. The best scratch configuration was $\lambda=0.0$, $\eta=0.1$, and $n_{\text{iters}}=2500$ (mean CV accuracy 0.8207). The best \texttt{scikit-learn} configuration used \texttt{liblinear} with $C=10$ (mean CV accuracy 0.8207).
+
+\begin{table}[H]
+  \centering
+  \caption{Logistic Regression results on Dataset~1 (test set).}
+  \label{tab:uci-logreg}
+  \begin{tabular}{lccccc}
+    \toprule
+    Model & Acc & Prec & Rec & F1 & AUC \\
+    \midrule
+    FS LR (best) & 0.8370 & 0.8673 & 0.8333 & 0.8500 & 0.9177 \\
+    SK LR (best) & 0.8370 & 0.8673 & 0.8333 & 0.8500 & 0.9180 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Gaussian Naive Bayes (Scratch vs. \texttt{scikit-learn})}
+Table~\ref{tab:uci-gnb} summarizes GNB performance. The model achieves test accuracy 0.8315 and ROC--AUC 0.8917. In stratified 5-fold CV on the training split, mean accuracy is 0.8166. From-scratch and \texttt{scikit-learn} results match exactly.
+
+\begin{table}[H]
+  \centering
+  \caption{Gaussian Naive Bayes results on Dataset~1 (test set).}
+  \label{tab:uci-gnb}
+  \begin{tabular}{lccccc}
+    \toprule
+    Model & Acc & Prec & Rec & F1 & AUC \\
+    \midrule
+    FS GNB & 0.8315 & 0.8447 & 0.8529 & 0.8488 & 0.8917 \\
+    SK GNB & 0.8315 & 0.8447 & 0.8529 & 0.8488 & 0.8917 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ----------------------------------------------------------
+\subsection{Dataset~2: Heart Failure Prediction}
+% ----------------------------------------------------------
+
+\subsubsection{kNN (Scratch vs. \texttt{scikit-learn})}
+Table~\ref{tab:hf-knn} reports kNN results. Stratified cross-validation selected $k=21$ for Euclidean and $k=5$ for Manhattan distance. As before, scratch and \texttt{scikit-learn} metrics coincide.
+
+\begin{table}[H]
+  \centering
+  \caption{kNN results on Dataset~2 (test set).}
+  \label{tab:hf-knn}
+  \begin{tabular}{lcccc}
+    \toprule
+    Model & Acc & Prec & Rec & F1\\
+    \midrule
+    FS kNN (Eucl., $k=21$) & 0.8533 & 0.8571 & 0.8824 & 0.8696\\
+    FS kNN (Manh., $k=5$)  & 0.8859 & 0.8785 & 0.9216 & 0.8995\\
+    SK kNN (Eucl., $k=21$) & 0.8533 & 0.8571 & 0.8824 & 0.8696\\
+    SK kNN (Manh., $k=5$)  & 0.8859 & 0.8785 & 0.9216 & 0.8995\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Logistic Regression (Scratch vs. \texttt{scikit-learn})}
+Table~\ref{tab:hf-lr} reports Logistic Regression performance. The scratch implementation attains higher test accuracy (0.8913 vs. 0.8804), while ROC--AUC is nearly identical. The best scratch configuration was $\lambda=0.0$, $\eta=0.01$, $n_{\text{iters}}=1000$ (mean CV accuracy 0.8556). The best \texttt{scikit-learn} configuration used \texttt{lbfgs} with $C=0.01$ (mean CV accuracy 0.8570).
+
+\begin{table}[H]
+  \centering
+  \caption{Logistic Regression results on Dataset~2 (test set).}
+  \label{tab:hf-lr}
+  \begin{tabular}{lccccc}
+    \toprule
+    Model & Acc & Prec & Rec & F1 & AUC \\
+    \midrule
+    FS LR (best) & 0.8913 & 0.8942 & 0.9118 & 0.9029 & 0.9346 \\
+    SK LR (best) & 0.8804 & 0.8774 & 0.9118 & 0.8942 & 0.9351 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Gaussian Naive Bayes (Scratch vs. \texttt{scikit-learn})}
+Table~\ref{tab:hf-gnb} shows that GNB achieves the strongest performance on Dataset~2 (Acc 0.9130, AUC 0.9451). In stratified 5-fold CV on the training split, mean accuracy is 0.8502. Scratch and \texttt{scikit-learn} results match exactly.
+
+\begin{table}[H]
+  \centering
+  \caption{Gaussian Naive Bayes results on Dataset~2 (test set).}
+  \label{tab:hf-gnb}
+  \begin{tabular}{lccccc}
+    \toprule
+    Model & Acc & Prec & Rec & F1 & AUC \\
+    \midrule
+    FS GNB & 0.9130 & 0.9300 & 0.9118 & 0.9208 & 0.9451 \\
+    SK GNB & 0.9130 & 0.9300 & 0.9118 & 0.9208 & 0.9451 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ==========================================================
+\section{Discussion}
+% ==========================================================
+Two practical outcomes stand out.
+
+\textbf{(i) Correctness against reference implementations.}
+For kNN and GNB, the from-scratch and \texttt{scikit-learn} models produce identical metrics on both datasets under matched preprocessing and configurations. This strongly supports the correctness of the distance computations, voting logic, and closed-form Gaussian likelihood estimation. Logistic Regression also closely matches the library model; small differences on Dataset~2 are expected because the optimization procedures differ (fixed-step gradient descent vs. library solvers) even when both apply $\ell_2$ regularization.
+
+\textbf{(ii) Model behavior depends on the dataset representation.}
+On Dataset~1, kNN with Euclidean distance provides the highest test accuracy (0.8750), suggesting that local neighborhood structure is informative after preprocessing. Logistic Regression attains competitive accuracy (0.8370) and the highest AUC (about 0.918), indicating strong ranking quality of its probabilistic outputs. On Dataset~2, Gaussian Naive Bayes dominates (Acc 0.9130, AUC 0.9451), consistent with the dataset being clean, fully observed, and well-aligned with class-conditional Gaussian modeling after encoding.
+
+\textbf{(iii) Relation to reported state-of-the-art ensemble methods.}
+The best accuracy observed in our experiments (91.30\% for GNB on Dataset~2) is lower than the accuracies sometimes reported for ensemble methods such as XGBoost on similar UCI-style datasets~\cite{yang2022,doki2022}. However, such reported results are not always directly comparable due to differences in preprocessing, resampling, and evaluation protocols. Our results show that simple, transparent models already provide strong baselines under a carefully controlled scaling protocol.
+
+\textbf{(iv) Interpretability and clinical relevance.}
+Despite the potential performance gap to complex ensembles, Logistic Regression and Gaussian Naive Bayes offer clear parameterizations in terms of feature coefficients and class-conditional distributions. The from-scratch implementations used here make these mechanisms explicit and provide an educational bridge between theoretical derivations and practical deployment.
+
+\textbf{Limitations.}
+Preprocessing steps such as imputation and categorical encoding are applied to create complete numeric tables before model evaluation. While scaling is strictly training-only within each split/fold, future work can further strengthen leakage control by nesting imputation and encoding inside cross-validation (i.e., fitting imputers and encoders on training folds only and applying them to validation folds). In addition, our evaluation is limited to two UCI-style datasets and a single random train--test split; more extensive robustness studies (e.g., multiple splits, external validation cohorts) are left for future work.
+
+% ==========================================================
+\section{Conclusion and Future Work}
+% ==========================================================
+We implemented kNN, Logistic Regression with $\ell_2$ regularization, and Gaussian Naive Bayes from scratch and evaluated them against \texttt{scikit-learn} baselines on two heart disease datasets using stratified splitting and training-only estimation of scaling parameters. The close agreement with library results---including exact parity for kNN and GNB and near parity for Logistic Regression---supports the correctness of the implementations and demonstrates that classical models can achieve strong performance when evaluated under a consistent, leakage-aware protocol.
+
+Beyond serving as a course project, this work provides transparent baselines for heart disease prediction and clarifies the behavior of foundational algorithms that often appear as components within more complex pipelines. Future work will extend this framework with additional models (SVMs, decision trees, random forests), nested preprocessing pipelines, and deeper evaluation, including calibration analysis, robustness under distribution shifts, and clinically interpretable explanations.
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{1}
+
+% Dataset ve WHO
+\bibitem{hdpred}
+R.~K.~Sony, ``Heart Disease Data,'' Kaggle. Available: \url{https://www.kaggle.com/datasets/redwankarimsony/heart-disease-data}. Accessed: December~2025.
+
+\bibitem{hfpred}
+F.~Soriano, ``Heart Failure Prediction,'' Kaggle. Available: \url{https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction}. Accessed: December~2025.
+
+\bibitem{who_cvd}
+World Health Organization, ``Cardiovascular diseases (CVDs),'' Fact Sheet, 2023. Available: \url{https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds)}.
+
+% Metin içinde atıf yapılan makaleler
+\bibitem{yang2022}
+J.~Yang and J.~Guan, ``A Heart Disease Prediction Model Based on Feature Optimization and Smote-Xgboost Algorithm,'' \emph{Scientific Programming}, vol. 2022, Art. no. 4734035, 2022.
+
+\bibitem{doki2022}
+S.~Doki, et al., ``Heart Disease Prediction Using XGBoost,'' in \emph{2022 3rd International Conference on Intelligent Computing Instrumentation and Control Technologies (ICICICT)}, 2022, pp. 1--6.
+
+\bibitem{alshraideh2024}
+M.~Alshraideh, et al., ``Machine Learning Based Heart Disease Prediction Using Random Forest,'' \emph{International Journal of Scientific Research in Engineering and Management}, vol. 08, no. 04, 2024.
+
+\bibitem{lee2022}
+S.-J.~Lee, et al., ``Deep Learning Improves Prediction of Cardiovascular Disease-Related Mortality and Admission in Patients with Hypertension,'' \emph{Journal of Personalized Medicine}, vol. 12, no. 11, p. 1876, 2022.
+
+\bibitem{priya2025}
+A.~M.~Priya, P.~R.~Kanna, and K.~Somasundaram, ``Hybrid Machine Learning Model for Cardiovascular Disease Prediction,'' \emph{Health Information Science and Systems}, vol. 13, no. 1, p. 67, 2025.
+
+\bibitem{wang2025}
+Z.~Wang, et al., ``Integrative framework for the development, validation, and implementation of machine learning-based cardiovascular disease risk prediction models,'' \emph{JMIR Cardio}, vol. 9, p. e68898, 2025.
+
+\bibitem{skouteli2024}
+C.~Skouteli, et al., ``Explainable AI Modeling in the Prediction of Cardiovascular Disease Risk,'' \emph{Studies in Health Technology and Informatics}, vol. 316, pp. 978--982, 2024.
+
+\end{thebibliography}
+\end{document}
